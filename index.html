@@ -495,6 +495,26 @@ E｜プロフィール自然誘導（100〜150字）
 【出力】
 投稿文のみを「---」で区切って出力。番号・タイプ名・文字数・説明は一切付けない。`;
 
+// ---- Anthropic API直接呼び出し ----
+async function callClaude(apiKey, params) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-allow-browser': 'true'
+    },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.content[0].text.trim();
+}
+
 // ---- 認証 ----
 function unlock() {
   if (document.getElementById('password-input').value === PASSWORD) {
@@ -600,14 +620,11 @@ async function generate() {
   if (memo) userPrompt += `\n参考にするキーワード・ネタ: ${memo}`;
 
   try {
-    const { default: Anthropic } = await import('https://esm.sh/@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const message = await client.messages.create({
+    const raw = await callClaude(apiKey, {
       model: 'claude-sonnet-4-6', max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }]
     });
-    const raw = message.content[0].text.trim();
     _posts = raw.split('---').map(p => p.trim()).filter(Boolean);
     renderPosts(_posts);
     setPostStatus(`${_posts.length}件生成完了！`, 'success');
@@ -646,10 +663,7 @@ SERIOUS
 （共感・真剣系5件を「---」で区切る）`;
 
   try {
-    const { default: Anthropic } = await import('https://esm.sh/@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
-    const message = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] });
-    const raw = message.content[0].text.trim();
+    const raw = await callClaude(getApiKey(), { model: 'claude-sonnet-4-6', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] });
     const humorItems = (raw.match(/HUMOR\s*([\s\S]*?)(?=SERIOUS|$)/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
     const seriousItems = (raw.match(/SERIOUS\s*([\s\S]*?)$/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
     let html = '';
@@ -689,10 +703,7 @@ SERIOUS
 （共感・真剣系5件を「---」で区切る）`;
 
   try {
-    const { default: Anthropic } = await import('https://esm.sh/@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
-    const message = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] });
-    const raw = message.content[0].text.trim();
+    const raw = await callClaude(getApiKey(), { model: 'claude-sonnet-4-6', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] });
     const humorItems = (raw.match(/HUMOR\s*([\s\S]*?)(?=SERIOUS|$)/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
     const seriousItems = (raw.match(/SERIOUS\s*([\s\S]*?)$/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
     let html = '';
@@ -737,10 +748,7 @@ PATTERN3
 （3件を「---」で区切る）`;
 
   try {
-    const { default: Anthropic } = await import('https://esm.sh/@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
-    const message = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] });
-    const raw = message.content[0].text.trim();
+    const raw = await callClaude(getApiKey(), { model: 'claude-sonnet-4-6', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] });
     const p1 = (raw.match(/PATTERN1\s*([\s\S]*?)(?=PATTERN2|$)/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
     const p2 = (raw.match(/PATTERN2\s*([\s\S]*?)(?=PATTERN3|$)/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
     const p3 = (raw.match(/PATTERN3\s*([\s\S]*?)$/) || [])[1]?.trim().split('---').map(s=>s.trim()).filter(Boolean) || [];
@@ -824,9 +832,7 @@ async function analyzeViral() {
   document.getElementById('viral-analysis-result').innerHTML = '';
 
   try {
-    const { default: Anthropic } = await import('https://esm.sh/@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const message = await client.messages.create({
+    const rawAnalysis = await callClaude(apiKey, {
       model: 'claude-sonnet-4-6', max_tokens: 400,
       messages: [{ role: 'user', content:
         `以下のThreads投稿のバズパターンを分析してJSON形式のみで返してください。\n\n投稿:\n${text}\n\n` +
@@ -839,7 +845,7 @@ async function analyzeViral() {
       }]
     });
     let analysis;
-    try { analysis = JSON.parse(message.content[0].text.trim()); }
+    try { analysis = JSON.parse(rawAnalysis); }
     catch(e) { analysis = { hook_type:'不明', emotion:'不明', structure:'分析エラー', key_elements:[], char_count: text.length }; }
 
     const newEntry = {
